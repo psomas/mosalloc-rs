@@ -1,0 +1,17 @@
+[package]
+name = "mosalloc"
+version = "0.1.0"
+edition = "2021"
+authors = ["Stratos Psomadakis <774566+psomas@users.noreply.github.com>"]
+description = """
+Mosalloc memory allocation hooks .so.
+"""
+
+[dependencies]
+ctor = "0.1.23"
+libc = "0.2.131"
+redhook = "2.0.0"
+mosalloc-rs = { path = "../../" }
+
+[lib]
+crate-type = ["cdylib"]
