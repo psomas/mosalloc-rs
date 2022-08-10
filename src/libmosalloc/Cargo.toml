@@ -1,0 +1,20 @@
+[package]
+name = "mosalloc"
+version = "0.1.0"
+edition = "2021"
+authors = ["Stratos Psomadakis <774566+psomas@users.noreply.github.com>"]
+description = """
+Mosalloc memory allocation hooks .so.
+"""
+
+[dependencies]
+ctor = "0.1.23"
+libc = "0.2.131"
+redhook = "2.0.0"
+mosalloc-rs = { path = "../../" }
+libseccomp = "0.2.3"
+epoll = "4.3.1"
+syscalls = { version = "0.6.6", features = ["aarch64", "x86_64"] }
+
+[lib]
+crate-type = ["cdylib"]
