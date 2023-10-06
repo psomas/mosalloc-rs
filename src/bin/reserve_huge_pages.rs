@@ -39,6 +39,11 @@ fn main() {
     match &mut cli.cmd {
         Cmd::Status => {
             println!("{}\n", HTLBReq::req_fmt_help());
+
+            htlb::show_thp();
+            htlb::show_overcommit();
+
+            println!("");
             RangeList::from_path(sysfs_path_online_nodes())
                 .iter()
                 .for_each(|n| htlb::print_htlb_status_node(n));
@@ -48,10 +53,13 @@ fn main() {
 
             htlb::print_htlb_status_node(*node);
 
-            htlb::disable_thp(true);
-            htlb::enable_overcommit(true);
+            htlb::disable_thp();
+            htlb::enable_overcommit();
 
             htlb_req.reserve_pages().unwrap();
+
+            println!("");
+            htlb::print_htlb_status_node(*node);
         }
     }
 }

@@ -124,7 +124,6 @@ hook! {
 }
 
 pub fn libc_brk(addr: *mut c_void) -> c_int {
-    println!("{:x}", addr as usize);
     unsafe { real!(brk)(addr) }
 }
 

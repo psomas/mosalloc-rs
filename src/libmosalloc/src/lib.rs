@@ -1,7 +1,3 @@
-#![feature(mixed_integer_ops)]
-#![feature(bench_black_box)]
-#![feature(int_roundings)]
-
 pub mod allocator;
 pub mod init;
 pub mod internal_allocator;

@@ -18,3 +18,4 @@ syscalls = { version = "0.6.6", features = ["aarch64", "x86_64"] }
 
 [lib]
 crate-type = ["cdylib"]
+

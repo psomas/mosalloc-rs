@@ -10,8 +10,9 @@ use crate::internal_allocator::InternalAllocator;
 use crate::preload_hooks;
 use crate::region::*;
 
-use mosalloc::utils::htlb::{AllocType, MosallocConfig, Pool};
+use mosalloc::utils::htlb::{AllocType, MosallocConfig, Pool, HookType};
 use mosalloc::utils::misc::align_up;
+use mosalloc::pr_dbg;
 
 const CHUNK: usize = 64;
 const NONSTD_FLAGS: i32 =
@@ -24,7 +25,7 @@ pub struct Allocator {
     file_region: Region,
     analyze: bool,
     dryrun: bool,
-
+    hook: HookType,
     drained: bool,
 }
 
@@ -80,20 +81,20 @@ impl Allocator {
                     AllocType::BRK => {
                         // move the program break to the start of the mosalloc managed heap
                         assert!(preload_hooks::libc_brk(heap.start as *mut libc::c_void) != -1);
-                        println!("brk {:x}", last);
+                        pr_dbg!("brk {:x}", last);
 
                         region = &mut anon_region;
                         upper = align_up(upper, region.max_pgsz);
                         last = upper;
                     }
                     AllocType::ANON => {
-                        println!("mmap {:x}", last);
+                        pr_dbg!("mmap {:x}", last);
                         region = &mut file_region;
                         upper = align_up(upper, region.max_pgsz);
                         last = upper;
                     }
                     AllocType::FILE => {
-                        println!("file {:x}", last);
+                        pr_dbg!("file {:x}", last);
                         break 'outer;
                     }
                 }
@@ -106,30 +107,19 @@ impl Allocator {
             }
         }
 
-        // FIXME: workaround to initialize the hooks
-        preload_hooks::libc_mmap(usize::MAX as *mut libc::c_void, 0, 0, 0, -1, 0);
-        preload_hooks::libc_munmap(usize::MAX as *mut libc::c_void, 0);
-        preload_hooks::libc_mprotect(usize::MAX as *mut libc::c_void, 0, 0);
-        preload_hooks::libc_madvise(usize::MAX as *mut libc::c_void, 0, 0);
-        preload_hooks::libc_mremap(
-            usize::MAX as *mut libc::c_void,
-            0,
-            0,
-            0,
-            usize::MAX as *mut libc::c_void,
-        );
-
         Self {
             heap,
             anon_region,
             file_region,
             analyze: config.analyze_regions,
             dryrun: config.dryrun,
+            hook: config.hook,
             drained,
         }
     }
 
     pub unsafe fn drain(&mut self) {
+        pr_dbg!("draining...");
         while black_box(libc::malloc(CHUNK)) as *const u8 != null() {}
         *libc::__errno_location() = 0;
         self.drained = true;
@@ -169,7 +159,7 @@ impl Allocator {
     }
 
     pub unsafe fn brk(&mut self, addr: usize) -> i32 {
-        println!("brk 0x{:x}", addr);
+        pr_dbg!("brk 0x{:x}", addr);
         if self.do_brk(Some(addr), None) == usize::MAX {
             -1
         } else {
@@ -178,7 +168,7 @@ impl Allocator {
     }
 
     pub unsafe fn sbrk(&mut self, incr: isize) -> usize {
-        println!("sbrk {}", incr);
+        pr_dbg!("sbrk {}", incr);
         self.do_brk(None, Some(incr))
     }
 
@@ -225,10 +215,15 @@ impl Allocator {
         fd: i32,
         offset: i64,
     ) -> usize {
-        println!("mmap 0x{:x}, len: {}, fd: {}", addr, len, fd);
+        pr_dbg!("mmap 0x{:x}, len: {}, fd: {}", addr, len, fd);
 
         let dryrun = self.dryrun;
         let drained = self.drained;
+
+        if !drained && (flags & libc::MAP_ANONYMOUS) != 0 {
+            *libc::__errno_location() = libc::ENOMEM;
+            return libc::MAP_FAILED as usize;
+        }
 
         let region = self.region_from_req(addr, fd);
 
@@ -239,11 +234,6 @@ impl Allocator {
         }
 
         let region = region.unwrap();
-
-        if !drained && region.alloc_type == AllocType::ANON {
-            *libc::__errno_location() = libc::ENOMEM;
-            return libc::MAP_FAILED as usize;
-        }
 
         // use libc for 'non-std' anon mapping (i.e. shared mappings, explicit hugetlb requests, stack mappings)
         if (region.alloc_type == AllocType::ANON) && ((flags & NONSTD_FLAGS) != 0) {
@@ -277,7 +267,7 @@ impl Allocator {
     }
 
     pub fn munmap(&mut self, addr: usize, len: usize) -> i32 {
-        println!("munmap 0x{:x} {}", addr, len);
+        pr_dbg!("munmap 0x{:x} {}", addr, len);
 
         // forward munmaps outside mosalloc regions to libc
         let region = self.region_from_addr(addr);
@@ -302,7 +292,7 @@ impl Allocator {
     }
 
     pub fn mprotect(&mut self, addr: usize, len: usize, prot: i32) -> i32 {
-        println!("mprotect 0x{:x} {} {}", addr, len, prot);
+        pr_dbg!("mprotect 0x{:x} {} {}", addr, len, prot);
         // forward mprotect outside mosalloc mem regions to libc
         let region = self.region_from_addr(addr);
         if region.is_none() || region.unwrap().alloc_type == AllocType::FILE {
@@ -314,7 +304,7 @@ impl Allocator {
     }
 
     pub fn madvise(&mut self, addr: usize, len: usize, advice: i32) -> i32 {
-        println!("madvise 0x{:x} {} {}", addr, len, advice);
+        pr_dbg!("madvise 0x{:x} {} {}", addr, len, advice);
 
         // forward madvise outside mosalloc mem regions to libc
         let region = self.region_from_addr(addr);
@@ -334,7 +324,7 @@ impl Allocator {
         flags: i32,
         new_address: usize,
     ) -> usize {
-        println!(
+        pr_dbg!(
             "mremap 0x{:x} {} {} {:x}",
             old_address, old_size, new_size, new_address
         );

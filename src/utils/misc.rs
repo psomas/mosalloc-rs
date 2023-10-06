@@ -61,3 +61,15 @@ pub fn size_from_str(s: &str) -> usize {
         &_ => todo!(),
     }
 }
+
+#[cfg(feature = "pr_dbg")]
+#[macro_export]
+macro_rules! pr_dbg {
+    ($( $args:expr ),*) => { println!( $( $args ),* ); }
+}
+
+#[cfg(not(feature = "pr_dbg"))]
+#[macro_export]
+macro_rules! pr_dbg {
+    ($( $args:expr ),*) => {}
+}

@@ -3,6 +3,7 @@ use std::ops::Range;
 
 use mosalloc::utils::htlb::{AllocType, Pool, PAGE_SIZE};
 use mosalloc::utils::misc::{align_down, align_up};
+use mosalloc::pr_dbg;
 
 use crate::lock::Lock;
 use crate::preload_hooks;
@@ -164,7 +165,7 @@ impl Region {
     }
 
     fn del_range_from_freemap(&mut self, start: usize, len: usize) -> usize {
-        println!("{:x} {} {:?}", start, len, self.free_map);
+        pr_dbg!("{:x} {} {:?}", start, len, self.free_map);
         let ridx = self
             .free_map
             .iter()
@@ -179,9 +180,9 @@ impl Region {
         let range_start = self.free_map[ridx].start;
 
         for r in self.free_map.iter() {
-            println!("{:x} - {:x}", r.start, r.end);
+            pr_dbg!("{:x} - {:x}", r.start, r.end);
         }
-        println!(
+        pr_dbg!(
             "del_range: start: {:x} range_start: {:x}",
             start, range_start
         );
@@ -198,9 +199,9 @@ impl Region {
         }
 
         for r in self.free_map.iter() {
-            println!("{:x} - {:x}", r.start, r.end);
+            pr_dbg!("{:x} - {:x}", r.start, r.end);
         }
-        println!(
+        pr_dbg!(
             "del_range: start: {:x} range_start: {:x}",
             start, range_start
         );
@@ -212,7 +213,7 @@ impl Region {
     }
 
     fn add_range_to_freemap(&mut self, start: usize, len: usize) {
-        println!("{:x} {} {:?}", start, len, self.free_map);
+        pr_dbg!("{:x} {} {:?}", start, len, self.free_map);
         let end = start + len;
 
         let mut left = false;
@@ -231,7 +232,7 @@ impl Region {
             .position(|x| x.start >= end)
             .unwrap_or(self.free_map.len());
 
-        println!("idx: {} {:x} {:x}", idx, start, end);
+        pr_dbg!("idx: {} {:x} {:x}", idx, start, end);
 
         // check if we can merge with a range to our left
         if idx > 0 && self.free_map[idx - 1].end == start {
@@ -255,7 +256,7 @@ impl Region {
             self.free_map.insert(idx, start..end);
         }
         for r in self.free_map.iter() {
-            println!("{:x} - {:x}", r.start, r.end);
+            pr_dbg!("{:x} - {:x}", r.start, r.end);
         }
     }
 

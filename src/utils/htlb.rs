@@ -40,10 +40,12 @@ pub fn supported_htlb_sizes() -> Vec<usize> {
 }
 
 // helper to disable THP
-pub fn disable_thp(readonly: bool) {
-    if !readonly {
-        fs::write(sysfs_path_thp_enabled(), "never").unwrap();
-    }
+pub fn disable_thp() {
+    fs::write(sysfs_path_thp_enabled(), "never").unwrap();
+    show_thp();
+}
+
+pub fn show_thp() {
     print!(
         "thp: {}",
         fs::read_to_string(sysfs_path_thp_enabled()).unwrap()
@@ -51,10 +53,12 @@ pub fn disable_thp(readonly: bool) {
 }
 
 // helper to enable overcommit
-pub fn enable_overcommit(readonly: bool) {
-    if !readonly {
-        fs::write(sysfs_path_overcommit(), "1").unwrap();
-    }
+pub fn enable_overcommit() {
+    fs::write(sysfs_path_overcommit(), "1").unwrap();
+    show_overcommit();
+}
+
+pub fn show_overcommit() {
     print!(
         "overcommit: {}",
         fs::read_to_string(sysfs_path_overcommit()).unwrap()
@@ -148,7 +152,7 @@ impl HTLBReq {
         sizes
             .iter()
             .zip(self.req.iter())
-            .filter(|(&sz, &req_sz)| req_sz > get_htlb_pages_node(self.node, sz).unwrap())
+            .filter(|(&sz, &req_sz)| req_sz < get_htlb_pages_node(self.node, sz).unwrap())
             .for_each(|(&sz, &req_sz)| set_htlb_pages_node(self.node, sz, req_sz).unwrap());
 
         sizes
@@ -160,7 +164,7 @@ impl HTLBReq {
         let check = sizes
             .iter()
             .zip(self.req.iter())
-            .any(|(&sz, &req_sz)| req_sz != get_htlb_pages_node(self.node, sz).unwrap());
+            .all(|(&sz, &req_sz)| req_sz == get_htlb_pages_node(self.node, sz).unwrap());
 
         if check {
             return Ok(());

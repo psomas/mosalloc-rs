@@ -59,8 +59,8 @@ fn main() {
 
     print_htlb_status_node(node);
 
-    disable_thp(true);
-    enable_overcommit(true);
+    disable_thp();
+    enable_overcommit();
 
     let htlb_req = HTLBReq { node, req };
     if !cli.dryrun {

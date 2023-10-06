@@ -8,6 +8,7 @@ use libc;
 use crate::preload_hooks;
 
 use mosalloc::utils::misc::align_up;
+use mosalloc::pr_dbg;
 
 const ARENA_SIZE: usize = 256 * 1024;
 const MAX_SUPPORTED_ALIGN: usize = 4096;
@@ -40,7 +41,7 @@ impl InternalAllocator {
     pub unsafe fn print_stats() {
         let arena_total = INTERNAL_ALLOCATOR.idx.load(Ordering::Relaxed);
         let arena_rem = ARENA_SIZE - arena_total;
-        println!(
+        pr_dbg!(
             "(arena) allocated: {:.02}KB, remaining: {:.02}KB",
             arena_total as f64 / 1024.0,
             arena_rem as f64 / 1024.0
@@ -48,7 +49,7 @@ impl InternalAllocator {
 
         let mmap_total = INTERNAL_ALLOCATOR.mmap_total.load(Ordering::Relaxed);
         let mmap_overhead = INTERNAL_ALLOCATOR.mmap_overhead.load(Ordering::Relaxed);
-        println!(
+        pr_dbg!(
             "(mmap) allocated: {:.02}MB, overhead: {:.02}KB",
             mmap_total as f64 / 1024.0 / 1024.0,
             mmap_overhead as f64 / 1024.0

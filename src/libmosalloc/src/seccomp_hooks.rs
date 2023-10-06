@@ -6,9 +6,10 @@ use std::thread;
 use syscalls::Sysno;
 
 use crate::allocator::Allocator;
-use crate::internal_allocator::InternalAllocator;
+use crate::preload_hooks::libc_brk;
 
 use mosalloc::utils::htlb::MosallocConfig;
+use mosalloc::pr_dbg;
 
 const SYSCALLS: [&'static str; 6] = ["brk", "mmap", "munmap", "mprotect", "madvise", "mremap"];
 
@@ -22,7 +23,7 @@ pub unsafe fn seccomp_init(config: MosallocConfig) {
     thread::spawn(move || {
         let fd = fd_rx.recv().unwrap();
 
-        SECCOMP_MOSALLOC = Some(Allocator::new(config, true));
+        SECCOMP_MOSALLOC = Some(Allocator::new(config, false));
         let mosalloc = SECCOMP_MOSALLOC.as_mut().unwrap();
         stx.send(true).unwrap();
 
@@ -37,7 +38,7 @@ pub unsafe fn seccomp_init(config: MosallocConfig) {
         loop {
             epoll::wait(pfd, -1, &mut [event]).unwrap();
             let req = ScmpNotifReq::receive(fd).unwrap();
-            println!("got syscall {}", req.data.syscall);
+            pr_dbg!("got syscall {}", req.data.syscall);
 
             match req.data.syscall {
                 brk if brk == Sysno::brk as i32 => {
@@ -45,7 +46,7 @@ pub unsafe fn seccomp_init(config: MosallocConfig) {
                     ret = if oldbrk != usize::MAX {
                         req.data.args[0] as i64
                     } else {
-                        oldbrk as i64
+                        libc_brk(0 as _) as _
                     };
                     err = 0;
                 }
@@ -61,7 +62,8 @@ pub unsafe fn seccomp_init(config: MosallocConfig) {
                     err = if ret != libc::MAP_FAILED as i64 {
                         0
                     } else {
-                        *libc::__errno_location()
+                        pr_dbg!("{}", *libc::__errno_location());
+                        -*libc::__errno_location()
                     };
                 }
                 munmap if munmap == Sysno::munmap as i32 => {
@@ -70,7 +72,7 @@ pub unsafe fn seccomp_init(config: MosallocConfig) {
                     err = if ret == 0 as i64 {
                         0
                     } else {
-                        *libc::__errno_location()
+                        -*libc::__errno_location()
                     };
                 }
                 mprotect if mprotect == Sysno::mprotect as i32 => {
@@ -94,7 +96,7 @@ pub unsafe fn seccomp_init(config: MosallocConfig) {
                     err = if ret == 0 as i64 {
                         0
                     } else {
-                        *libc::__errno_location()
+                        -*libc::__errno_location()
                     };
                 }
                 mremap if mremap == Sysno::mremap as i32 => {
@@ -108,7 +110,7 @@ pub unsafe fn seccomp_init(config: MosallocConfig) {
                     err = if ret != libc::MAP_FAILED as i64 {
                         0
                     } else {
-                        *libc::__errno_location()
+                        -*libc::__errno_location()
                     };
                 }
                 _ => {
@@ -116,7 +118,7 @@ pub unsafe fn seccomp_init(config: MosallocConfig) {
                 }
             }
 
-            println!("ret: {:x}, err: {}", ret, err);
+            pr_dbg!("ret: {:x}, err: {}", ret, err);
             let resp = ScmpNotifResp::new(req.id, ret, err, 0);
             resp.respond(fd).unwrap();
         }
@@ -124,7 +126,7 @@ pub unsafe fn seccomp_init(config: MosallocConfig) {
 
     let mut filter = ScmpFilterContext::new_filter(ScmpAction::Allow).unwrap();
 
-    filter.add_arch(ScmpArch::X8664).unwrap();
+    filter.add_arch(ScmpArch::Native).unwrap();
 
     for sc in SYSCALLS.iter() {
         // FIXME: add finer grained control for e.g. mmap ranges or fds
@@ -138,5 +140,5 @@ pub unsafe fn seccomp_init(config: MosallocConfig) {
     srx.recv().unwrap();
 
     // FIXME: do we need to drain?
-    InternalAllocator::print_stats();
+    SECCOMP_MOSALLOC.as_mut().unwrap().drain();
 }
